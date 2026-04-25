@@ -226,6 +226,19 @@
     100% { box-shadow: var(--shadow); }
   }
 
+  /* ── Floating piece ── */
+  #floatingPiece {
+    position: fixed;
+    pointer-events: none;
+    z-index: 999;
+    display: none;
+    transform: translate(-50%, calc(-100% - 14px));
+  }
+  #floatingPiece .fp-grid {
+    display: inline-grid;
+    filter: drop-shadow(0 6px 18px rgba(0, 102, 255, 0.35));
+  }
+
   /* ── Dark mode toggle ── */
   #darkToggle {
     position: fixed;
@@ -267,9 +280,9 @@
   }
 
   .start-logo {
-    font-size: 56px;
+    font-size: clamp(28px, 9vw, 52px);
     font-weight: 800;
-    letter-spacing: -3px;
+    letter-spacing: -2px;
     margin-bottom: 12px;
   }
   .start-logo span { color: var(--accent); }
@@ -398,6 +411,8 @@
   </svg>
 </button>
 
+<div id="floatingPiece"><div class="fp-grid" id="fpGrid"></div></div>
+
 <div id="startScreen">
   <div class="start-logo">DecaS<span>t</span>a<span>c</span>k</div>
   <button class="btn" onclick="beginGame()">Start</button>
@@ -427,7 +442,7 @@
 
 <script>
 const COLS = 10, ROWS = 10;
-const DRAG_Y_OFFSET = 2; // rows above pointer so you can see placement
+const DRAG_Y_OFFSET = 0; // board preview tracks cursor; floating piece shows what you're carrying
 
 const PIECE_DEFS = [
   [[0,0]],
@@ -531,11 +546,45 @@ function showPreview(originR, originC, piece) {
   return valid;
 }
 
+/* ── Floating piece ── */
+const FP_CELL = 28;
+function showFloating(piece, x, y) {
+  const el  = document.getElementById('floatingPiece');
+  const fpg = document.getElementById('fpGrid');
+  const maxR = Math.max(...piece.map(([r]) => r)) + 1;
+  const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+
+  fpg.innerHTML = '';
+  fpg.style.gridTemplateColumns = `repeat(${maxC}, ${FP_CELL}px)`;
+  fpg.style.gridTemplateRows    = `repeat(${maxR}, ${FP_CELL}px)`;
+  fpg.style.gap = '3px';
+
+  for (let r = 0; r < maxR; r++) {
+    for (let c = 0; c < maxC; c++) {
+      const filled = piece.some(([pr, pc]) => pr === r && pc === c);
+      const cell = document.createElement('div');
+      cell.style.cssText = filled
+        ? `width:${FP_CELL}px;height:${FP_CELL}px;border-radius:5px;background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.2)`
+        : `width:${FP_CELL}px;height:${FP_CELL}px`;
+      fpg.appendChild(cell);
+    }
+  }
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  el.style.display = 'block';
+}
+
+function hideFloating() {
+  document.getElementById('floatingPiece').style.display = 'none';
+  document.getElementById('fpGrid').innerHTML = '';
+}
+
 /* ── Pointer (mouse + touch) ── */
 function onPointerDown(e, piece, slotIdx, slotEl) {
   e.preventDefault();
   active = { piece, slotIdx, slotEl, _onBoard: false, _originR: 0, _originC: 0 };
   slotEl.classList.add('lifting');
+  showFloating(piece, e.clientX, e.clientY);
   updateDragPosition(e.clientX, e.clientY);
 }
 
@@ -566,6 +615,7 @@ function updateDragPosition(x, y) {
 function onPointerMove(e) {
   if (!active) return;
   e.preventDefault();
+  showFloating(active.piece, e.clientX, e.clientY);
   updateDragPosition(e.clientX, e.clientY);
 }
 
@@ -575,6 +625,7 @@ function onPointerUp(e) {
 
   const { piece, slotIdx, slotEl } = active;
   slotEl.classList.remove('lifting');
+  hideFloating();
 
   if (active._onBoard) {
     const { _originR: originR, _originC: originC } = active;
@@ -612,6 +663,7 @@ document.addEventListener('pointerup',   onPointerUp,   { passive: false });
 document.addEventListener('pointercancel', () => {
   if (active) {
     active.slotEl.classList.remove('lifting');
+    hideFloating();
     clearPreview();
     active = null;
   }
