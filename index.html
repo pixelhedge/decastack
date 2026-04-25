@@ -176,9 +176,8 @@
   .piece-slot.lifting { animation: pickup 0.18s ease forwards; cursor: grabbing; }
 
   @keyframes pickup {
-    0%   { transform: scale(1);    opacity: 1; }
-    35%  { transform: scale(1.08) translateY(-5px); opacity: 0.85; }
-    100% { transform: scale(0.94); opacity: 0.25; }
+    0%   { opacity: 1; }
+    100% { opacity: 0.15; }
   }
 
   .piece-grid { display: inline-grid; gap: 3px; pointer-events: none; }
@@ -547,25 +546,34 @@ function showPreview(originR, originC, piece) {
 }
 
 /* ── Floating piece ── */
-const FP_CELL = 28;
+const GRID_GAP = 3;
+
+function getBoardMetrics() {
+  const rect = document.getElementById('board').getBoundingClientRect();
+  const cellSize = (rect.width - (COLS - 1) * GRID_GAP) / COLS;
+  const stride   = cellSize + GRID_GAP; // pixels per grid step (cell + gap)
+  return { rect, cellSize, stride };
+}
+
 function showFloating(piece, x, y) {
   const el  = document.getElementById('floatingPiece');
   const fpg = document.getElementById('fpGrid');
   const maxR = Math.max(...piece.map(([r]) => r)) + 1;
   const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+  const { cellSize } = getBoardMetrics();
 
   fpg.innerHTML = '';
-  fpg.style.gridTemplateColumns = `repeat(${maxC}, ${FP_CELL}px)`;
-  fpg.style.gridTemplateRows    = `repeat(${maxR}, ${FP_CELL}px)`;
-  fpg.style.gap = '3px';
+  fpg.style.gridTemplateColumns = `repeat(${maxC}, ${cellSize}px)`;
+  fpg.style.gridTemplateRows    = `repeat(${maxR}, ${cellSize}px)`;
+  fpg.style.gap = `${GRID_GAP}px`;
 
   for (let r = 0; r < maxR; r++) {
     for (let c = 0; c < maxC; c++) {
       const filled = piece.some(([pr, pc]) => pr === r && pc === c);
       const cell = document.createElement('div');
       cell.style.cssText = filled
-        ? `width:${FP_CELL}px;height:${FP_CELL}px;border-radius:5px;background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.2)`
-        : `width:${FP_CELL}px;height:${FP_CELL}px`;
+        ? `width:${cellSize}px;height:${cellSize}px;border-radius:5px;background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.2)`
+        : `width:${cellSize}px;height:${cellSize}px`;
       fpg.appendChild(cell);
     }
   }
@@ -590,26 +598,30 @@ function onPointerDown(e, piece, slotIdx, slotEl) {
 
 function updateDragPosition(x, y) {
   const { piece } = active;
-  const boardEl = document.getElementById('board');
-  const rect = boardEl.getBoundingClientRect();
-  const cs = rect.width / COLS;
+  const { rect, cellSize, stride } = getBoardMetrics();
 
-  const col = Math.floor((x - rect.left) / cs);
-  const row = Math.floor((y - rect.top) / cs) - DRAG_Y_OFFSET;
+  const maxR = Math.max(...piece.map(([r]) => r)) + 1;
+  const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
 
-  if (col >= 0 && col < COLS) {
-    const maxR = Math.max(...piece.map(([r]) => r));
-    const maxC = Math.max(...piece.map(([, c]) => c));
-    const originR = row - Math.floor(maxR / 2);
-    const originC = col - Math.floor(maxC / 2);
-    showPreview(originR, originC, piece);
-    active._originR = originR;
-    active._originC = originC;
-    active._onBoard = true;
-  } else {
-    clearPreview();
-    active._onBoard = false;
-  }
+  const totalW = maxC * cellSize + (maxC - 1) * GRID_GAP;
+  const totalH = maxR * cellSize + (maxR - 1) * GRID_GAP;
+
+  // Top-left pixel of the floating piece — mirrors CSS transform: translate(-50%, calc(-100% - 14px))
+  const fpLeft = x - totalW / 2;
+  const fpTop  = y - 14 - totalH;
+
+  // Map directly: which board cell does the piece top-left sit over?
+  const originC = Math.round((fpLeft - rect.left) / stride);
+  const originR = Math.round((fpTop  - rect.top)  / stride);
+
+  const cells = piece.map(([dr, dc]) => [originR + dr, originC + dc]);
+  const valid = cells.every(([pr, pc]) =>
+    pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && !grid[pr][pc]
+  );
+
+  active._originR = originR;
+  active._originC = originC;
+  active._onBoard = valid;
 }
 
 function onPointerMove(e) {
@@ -630,29 +642,19 @@ function onPointerUp(e) {
   if (active._onBoard) {
     const { _originR: originR, _originC: originC } = active;
     const cells = piece.map(([dr, dc]) => [originR + dr, originC + dc]);
-    const valid = cells.every(([pr, pc]) =>
-      pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && !grid[pr][pc]
-    );
+    const colorIdx = ((slotIdx + 1) % 5) + 1;
+    cells.forEach(([pr, pc]) => { grid[pr][pc] = colorIdx; });
+    score += piece.length;
+    pieces[slotIdx] = null;
 
-    clearPreview();
+    renderBoard();
+    checkAndClearLines();
+    updateScoreDisplay();
+    flashScore();
+    renderTray();
 
-    if (valid) {
-      const colorIdx = ((slotIdx + 1) % 5) + 1;
-      cells.forEach(([pr, pc]) => { grid[pr][pc] = colorIdx; });
-      score += piece.length;
-      pieces[slotIdx] = null;
-
-      renderBoard();
-      checkAndClearLines();
-      updateScoreDisplay();
-      flashScore();
-      renderTray();
-
-      if (pieces.every(p => p === null)) spawnPieces();
-      else checkGameOver();
-    }
-  } else {
-    clearPreview();
+    if (pieces.every(p => p === null)) spawnPieces();
+    else checkGameOver();
   }
 
   active = null;
