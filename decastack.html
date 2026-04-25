@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>DecaStack</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f5f3;
+    --surface: #ffffff;
+    --border: #e2e2de;
+    --text: #111110;
+    --muted: #9a9a94;
+    --accent: #0066ff;
+    --accent-light: #e6efff;
+    --accent-glow: rgba(0, 102, 255, 0.15);
+    --cell-empty: #eeeeeb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    --radius: 6px;
+    --overlay-bg: rgba(245, 245, 243, 0.92);
+  }
+
+  [data-theme="dark"] {
+    --bg: #181816;
+    --surface: #222220;
+    --border: #333330;
+    --text: #efefed;
+    --muted: #666660;
+    --accent-light: #0d2a66;
+    --accent-glow: rgba(0, 102, 255, 0.25);
+    --cell-empty: #2c2c2a;
+    --shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.15);
+    --overlay-bg: rgba(24, 24, 22, 0.95);
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 24px;
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .logo {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+
+  .score-area { margin-left: auto; display: flex; gap: 20px; }
+  .score-box { text-align: right; }
+
+  .score-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  .score-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    transition: transform 0.1s, color 0.1s;
+  }
+
+  .score-value.pop { transform: scale(1.2); color: var(--accent); }
+
+  .board-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 3px;
+    width: min(340px, calc(100vw - 56px));
+    aspect-ratio: 1;
+  }
+
+  .cell {
+    border-radius: 5px;
+    background: var(--cell-empty);
+    transition: background 0.08s ease, transform 0.08s ease;
+  }
+
+  .cell.filled-1 { background: #0066ff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.filled-2 { background: #0052cc; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.filled-3 { background: #3385ff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.filled-4 { background: #0047b3; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.filled-5 { background: #66a3ff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+
+  .cell.preview {
+    background: rgba(0, 102, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+
+  .cell.invalid-preview {
+    background: #ffe6e6;
+    box-shadow: inset 0 0 0 1.5px #ff4444;
+  }
+
+  .cell.clearing {
+    animation: clearPop 0.15s ease forwards;
+  }
+
+  @keyframes clearPop {
+    0%   { transform: scale(1); }
+    20%  { transform: scale(1.2); }
+    65%  { transform: scale(0.78); }
+    100% { transform: scale(1); background: var(--cell-empty); box-shadow: none; }
+  }
+
+  .tray {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .piece-slot {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 90px;
+    box-shadow: var(--shadow);
+    transition: opacity 0.15s, transform 0.15s;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .piece-slot.empty { opacity: 0.35; cursor: default; }
+  .piece-slot.lifting { animation: pickup 0.18s ease forwards; cursor: grabbing; }
+
+  @keyframes pickup {
+    0%   { transform: scale(1);    opacity: 1; }
+    35%  { transform: scale(1.08) translateY(-5px); opacity: 0.85; }
+    100% { transform: scale(0.94); opacity: 0.25; }
+  }
+
+  .piece-grid { display: inline-grid; gap: 3px; pointer-events: none; }
+
+  #overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  #overlay.show { display: flex; }
+
+  .overlay-title { font-size: 40px; font-weight: 800; letter-spacing: -2px; }
+  .overlay-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .overlay-score { font-family: 'DM Mono', monospace; font-size: 34px; font-weight: 500; color: var(--accent); letter-spacing: -1px; }
+
+  .btn {
+    margin-top: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 36px;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .board-wrap.flash { animation: boardFlash 0.35s ease; }
+
+  @keyframes boardFlash {
+    0%   { box-shadow: var(--shadow); }
+    40%  { box-shadow: 0 0 0 6px var(--accent-glow); }
+    100% { box-shadow: var(--shadow); }
+  }
+
+  /* ── Dark mode toggle ── */
+  #darkToggle {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 250;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 4px;
+    line-height: 0;
+    transition: color 0.15s;
+  }
+  #darkToggle:hover { color: var(--text); }
+
+  /* ── Start screen ── */
+  #startScreen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+  #startScreen.hidden { display: none; }
+
+  .version {
+    position: absolute;
+    bottom: 24px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    opacity: 0.6;
+  }
+
+  .start-logo {
+    font-size: 56px;
+    font-weight: 800;
+    letter-spacing: -3px;
+    margin-bottom: 12px;
+  }
+  .start-logo span { color: var(--accent); }
+
+  .btn-ghost {
+    background: transparent;
+    color: #555553;
+    border: none;
+    padding: 10px 36px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: color 0.15s;
+  }
+  .btn-ghost:hover { color: var(--text); }
+
+  /* ── How to play modal ── */
+  #howToPlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+    background: rgba(17,17,16,0.25);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  #howToPlay.show { display: flex; }
+
+  .htp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px 24px;
+    width: min(320px, calc(100vw - 40px));
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+    position: relative;
+  }
+
+  .htp-close {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+  }
+  .htp-close:hover { color: var(--text); }
+
+  .htp-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .htp-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .htp-list li {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+    display: flex;
+    gap: 10px;
+  }
+
+  .htp-list li::before {
+    content: attr(data-n);
+    color: var(--accent);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DecaS<span>t</span>a<span>c</span>k</div>
+  <div class="score-area">
+    <div class="score-box">
+      <div class="score-label">Score</div>
+      <div class="score-value" id="score">0</div>
+    </div>
+    <div class="score-box">
+      <div class="score-label">Best</div>
+      <div class="score-value" id="best">0</div>
+    </div>
+  </div>
+</header>
+
+<div class="board-wrap" id="boardWrap">
+  <div id="board"></div>
+</div>
+
+<div class="tray" id="tray"></div>
+
+<button id="darkToggle" onclick="toggleDark()" aria-label="Toggle dark mode">
+  <!-- moon -->
+  <svg id="iconMoon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15.5 10.5A6.5 6.5 0 1 1 9.5 4a5 5 0 0 0 6 6.5z"/>
+  </svg>
+  <!-- sun -->
+  <svg id="iconSun" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:none">
+    <circle cx="10" cy="10" r="3.5"/>
+    <line x1="10" y1="2"    x2="10" y2="4"/>
+    <line x1="10" y1="16"   x2="10" y2="18"/>
+    <line x1="2"  y1="10"   x2="4"  y2="10"/>
+    <line x1="16" y1="10"   x2="18" y2="10"/>
+    <line x1="4.5" y1="4.5"   x2="5.9" y2="5.9"/>
+    <line x1="14.1" y1="14.1" x2="15.5" y2="15.5"/>
+    <line x1="15.5" y1="4.5"  x2="14.1" y2="5.9"/>
+    <line x1="5.9"  y1="14.1" x2="4.5"  y2="15.5"/>
+  </svg>
+</button>
+
+<div id="startScreen">
+  <div class="start-logo">DecaS<span>t</span>a<span>c</span>k</div>
+  <button class="btn" onclick="beginGame()">Start</button>
+  <button class="btn-ghost" onclick="showHowToPlay()">How to play</button>
+  <div class="version">Version 1.0</div>
+</div>
+
+<div id="howToPlay">
+  <div class="htp-card">
+    <button class="htp-close" onclick="hideHowToPlay()">×</button>
+    <div class="htp-title">How to play</div>
+    <ul class="htp-list">
+      <li data-n="1">Drag pieces from the tray onto the board.</li>
+      <li data-n="2">Fill a full row or column to clear it and score points.</li>
+      <li data-n="3">Place all 3 pieces to receive a new set.</li>
+      <li data-n="4">Game ends when no piece in the tray can fit on the board.</li>
+    </ul>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="overlay-title">Game over.</div>
+  <div class="overlay-sub">final score</div>
+  <div class="overlay-score" id="finalScore">0</div>
+  <button class="btn" onclick="startGame()">Play again</button>
+</div>
+
+<script>
+const COLS = 10, ROWS = 10;
+const DRAG_Y_OFFSET = 2; // rows above pointer so you can see placement
+
+const PIECE_DEFS = [
+  [[0,0]],
+  [[0,0],[0,1]],
+  [[0,0],[1,0]],
+  [[0,0],[0,1],[0,2]],
+  [[0,0],[1,0],[2,0]],
+  [[0,0],[0,1],[0,2],[0,3]],
+  [[0,0],[1,0],[2,0],[3,0]],
+  [[0,0],[0,1],[0,2],[0,3],[0,4]],
+  [[0,0],[1,0],[2,0],[3,0],[4,0]],
+  [[0,0],[0,1],[1,0],[1,1]],
+  [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],
+  [[0,0],[1,0],[1,1]],
+  [[0,0],[0,1],[1,0]],
+  [[0,0],[0,1],[1,1]],
+  [[0,1],[1,0],[1,1]],
+  [[0,0],[1,0],[2,0],[2,1]],
+  [[0,0],[0,1],[0,2],[1,0]],
+  [[0,0],[0,1],[1,1],[2,1]],
+  [[0,2],[1,0],[1,1],[1,2]],
+  [[0,1],[0,2],[1,0],[1,1]],
+  [[0,0],[0,1],[1,1],[1,2]],
+  [[0,0],[0,1],[0,2],[1,1]],
+  [[0,0],[1,0],[1,1],[2,0]],
+  [[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],
+  [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],
+];
+
+let grid, score, best, pieces;
+let active = null; // { piece, slotIdx, slotEl, _originR, _originC, _onBoard }
+let previewCells = [];
+
+/* ── Init ── */
+function startGame() {
+  grid = Array.from({length: ROWS}, () => new Array(COLS).fill(0));
+  score = 0;
+  best = parseInt(localStorage.getItem('1010best') || '0');
+  pieces = [null, null, null];
+  active = null;
+  clearPreview();
+  document.getElementById('overlay').classList.remove('show');
+  updateScoreDisplay();
+  renderBoard();
+  spawnPieces();
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('best').textContent = best;
+}
+
+function flashScore() {
+  const el = document.getElementById('score');
+  el.classList.remove('pop');
+  void el.offsetWidth;
+  el.classList.add('pop');
+  setTimeout(() => el.classList.remove('pop'), 200);
+}
+
+/* ── Board ── */
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      const v = grid[r][c];
+      cell.className = 'cell' + (v ? ` filled-${v}` : '');
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      board.appendChild(cell);
+    }
+  }
+}
+
+function getCell(r, c) {
+  return document.querySelector(`#board [data-r="${r}"][data-c="${c}"]`);
+}
+
+/* ── Preview ── */
+function clearPreview() {
+  previewCells.forEach(([r, c]) => {
+    const cell = getCell(r, c);
+    if (cell) cell.classList.remove('preview', 'invalid-preview');
+  });
+  previewCells = [];
+}
+
+function showPreview(originR, originC, piece) {
+  clearPreview();
+  const cells = piece.map(([dr, dc]) => [originR + dr, originC + dc]);
+  const valid = cells.every(([pr, pc]) =>
+    pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && !grid[pr][pc]
+  );
+  previewCells = cells;
+  cells.forEach(([pr, pc]) => {
+    const cell = getCell(pr, pc);
+    if (cell) cell.classList.add(valid ? 'preview' : 'invalid-preview');
+  });
+  return valid;
+}
+
+/* ── Pointer (mouse + touch) ── */
+function onPointerDown(e, piece, slotIdx, slotEl) {
+  e.preventDefault();
+  active = { piece, slotIdx, slotEl, _onBoard: false, _originR: 0, _originC: 0 };
+  slotEl.classList.add('lifting');
+  updateDragPosition(e.clientX, e.clientY);
+}
+
+function updateDragPosition(x, y) {
+  const { piece } = active;
+  const boardEl = document.getElementById('board');
+  const rect = boardEl.getBoundingClientRect();
+  const cs = rect.width / COLS;
+
+  const col = Math.floor((x - rect.left) / cs);
+  const row = Math.floor((y - rect.top) / cs) - DRAG_Y_OFFSET;
+
+  if (col >= 0 && col < COLS) {
+    const maxR = Math.max(...piece.map(([r]) => r));
+    const maxC = Math.max(...piece.map(([, c]) => c));
+    const originR = row - Math.floor(maxR / 2);
+    const originC = col - Math.floor(maxC / 2);
+    showPreview(originR, originC, piece);
+    active._originR = originR;
+    active._originC = originC;
+    active._onBoard = true;
+  } else {
+    clearPreview();
+    active._onBoard = false;
+  }
+}
+
+function onPointerMove(e) {
+  if (!active) return;
+  e.preventDefault();
+  updateDragPosition(e.clientX, e.clientY);
+}
+
+function onPointerUp(e) {
+  if (!active) return;
+  e.preventDefault();
+
+  const { piece, slotIdx, slotEl } = active;
+  slotEl.classList.remove('lifting');
+
+  if (active._onBoard) {
+    const { _originR: originR, _originC: originC } = active;
+    const cells = piece.map(([dr, dc]) => [originR + dr, originC + dc]);
+    const valid = cells.every(([pr, pc]) =>
+      pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && !grid[pr][pc]
+    );
+
+    clearPreview();
+
+    if (valid) {
+      const colorIdx = ((slotIdx + 1) % 5) + 1;
+      cells.forEach(([pr, pc]) => { grid[pr][pc] = colorIdx; });
+      score += piece.length;
+      pieces[slotIdx] = null;
+
+      renderBoard();
+      checkAndClearLines();
+      updateScoreDisplay();
+      flashScore();
+      renderTray();
+
+      if (pieces.every(p => p === null)) spawnPieces();
+      else checkGameOver();
+    }
+  } else {
+    clearPreview();
+  }
+
+  active = null;
+}
+
+document.addEventListener('pointermove', onPointerMove, { passive: false });
+document.addEventListener('pointerup',   onPointerUp,   { passive: false });
+document.addEventListener('pointercancel', () => {
+  if (active) {
+    active.slotEl.classList.remove('lifting');
+    clearPreview();
+    active = null;
+  }
+});
+
+/* ── Lines ── */
+function checkAndClearLines() {
+  const rowsToClear = [], colsToClear = [];
+  for (let r = 0; r < ROWS; r++) if (grid[r].every(v => v)) rowsToClear.push(r);
+  for (let c = 0; c < COLS; c++) if (grid.every(row => row[c])) colsToClear.push(c);
+  if (!rowsToClear.length && !colsToClear.length) return;
+
+  const toAnimate = new Set();
+  rowsToClear.forEach(r => { for (let c = 0; c < COLS; c++) toAnimate.add(`${r},${c}`); });
+  colsToClear.forEach(c => { for (let r = 0; r < ROWS; r++) toAnimate.add(`${r},${c}`); });
+  // Sort cells center-first so animation radiates outward
+  const cellKeys = [...toAnimate];
+  const coords = cellKeys.map(k => k.split(',').map(Number));
+  const centerR = coords.reduce((s, [r]) => s + r, 0) / coords.length;
+  const centerC = coords.reduce((s, [, c]) => s + c, 0) / coords.length;
+  cellKeys.sort((a, b) => {
+    const [ar, ac] = a.split(',').map(Number);
+    const [br, bc] = b.split(',').map(Number);
+    return (Math.hypot(ar - centerR, ac - centerC) - Math.hypot(br - centerR, bc - centerC));
+  });
+  const ANIM_WINDOW_MS = 200; // fixed total spread regardless of cell count
+  const step = cellKeys.length > 1 ? ANIM_WINDOW_MS / (cellKeys.length - 1) : 0;
+  cellKeys.forEach((key, i) => {
+    const [r, c] = key.split(',').map(Number);
+    const cell = getCell(r, c);
+    if (cell) {
+      cell.style.animationDelay = `${Math.round(i * step)}ms`;
+      cell.classList.add('clearing');
+    }
+  });
+
+  const wrap = document.getElementById('boardWrap');
+  wrap.classList.remove('flash');
+  void wrap.offsetWidth;
+  wrap.classList.add('flash');
+
+  const n = rowsToClear.length + colsToClear.length;
+  score += n * 10 + (n > 1 ? n * 5 : 0);
+
+  const clearDelay = ANIM_WINDOW_MS + 200;
+  setTimeout(() => {
+    rowsToClear.forEach(r => { grid[r] = new Array(COLS).fill(0); });
+    colsToClear.forEach(c => { grid.forEach(row => { row[c] = 0; }); });
+    if (score > best) { best = score; localStorage.setItem('1010best', best); }
+    updateScoreDisplay();
+    renderBoard();
+  }, clearDelay);
+}
+
+/* ── Tray ── */
+function spawnPieces() {
+  for (let i = 0; i < 3; i++)
+    pieces[i] = PIECE_DEFS[Math.floor(Math.random() * PIECE_DEFS.length)];
+  renderTray();
+  checkGameOver();
+}
+
+function renderTray() {
+  const tray = document.getElementById('tray');
+  tray.innerHTML = '';
+  pieces.forEach((piece, idx) => {
+    const slot = document.createElement('div');
+    slot.className = 'piece-slot' + (piece ? '' : ' empty');
+
+    if (piece) {
+      const maxR = Math.max(...piece.map(([r]) => r)) + 1;
+      const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+      const pg = document.createElement('div');
+      pg.className = 'piece-grid';
+      pg.style.gridTemplateColumns = `repeat(${maxC}, 14px)`;
+      pg.style.gridTemplateRows    = `repeat(${maxR}, 14px)`;
+      pg.style.gap = '3px';
+
+      for (let r = 0; r < maxR; r++) {
+        for (let c = 0; c < maxC; c++) {
+          const filled = piece.some(([pr, pc]) => pr === r && pc === c);
+          const cell = document.createElement('div');
+          cell.style.cssText = filled
+            ? 'width:14px;height:14px;border-radius:3px;background:var(--accent)'
+            : 'width:14px;height:14px;visibility:hidden';
+          pg.appendChild(cell);
+        }
+      }
+
+      slot.appendChild(pg);
+      slot.addEventListener('pointerdown', (e) => onPointerDown(e, piece, idx, slot), { passive: false });
+    }
+
+    tray.appendChild(slot);
+  });
+}
+
+/* ── Game over ── */
+function canPlace(piece) {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (piece.every(([dr, dc]) => {
+        const nr = r + dr, nc = c + dc;
+        return nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !grid[nr][nc];
+      })) return true;
+  return false;
+}
+
+function checkGameOver() {
+  const available = pieces.filter(p => p !== null);
+  if (!available.length) return;
+  if (available.every(p => !canPlace(p))) {
+    if (score > best) { best = score; localStorage.setItem('1010best', best); }
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('overlay').classList.add('show');
+  }
+}
+
+function toggleDark() {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : '';
+  localStorage.setItem('1010theme', dark ? 'dark' : '');
+  document.getElementById('iconMoon').style.display = dark ? 'none' : '';
+  document.getElementById('iconSun').style.display  = dark ? '' : 'none';
+}
+
+// Restore saved theme
+if (localStorage.getItem('1010theme') === 'dark') {
+  document.documentElement.dataset.theme = 'dark';
+  document.getElementById('iconMoon').style.display = 'none';
+  document.getElementById('iconSun').style.display  = '';
+}
+
+function beginGame() {
+  document.getElementById('startScreen').classList.add('hidden');
+  startGame();
+}
+
+function showHowToPlay() {
+  document.getElementById('howToPlay').classList.add('show');
+}
+
+function hideHowToPlay() {
+  document.getElementById('howToPlay').classList.remove('show');
+}
+
+// Close how-to-play when clicking the backdrop
+document.getElementById('howToPlay').addEventListener('click', function(e) {
+  if (e.target === this) hideHowToPlay();
+});
+</script>
+</body>
+</html>
