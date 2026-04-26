@@ -203,6 +203,33 @@
   .overlay-sub { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
   .overlay-score { font-family: 'DM Mono', monospace; font-size: 34px; font-weight: 500; color: var(--accent); letter-spacing: -1px; }
 
+  .btn-share {
+    background: transparent;
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 8px;
+    padding: 8px 24px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: border-color 0.15s;
+  }
+  .btn-share:hover { border-color: rgba(255,255,255,0.7); }
+
+  .copy-toast {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    opacity: 0;
+    transition: opacity 0.2s;
+    height: 16px;
+  }
+  .copy-toast.show { opacity: 1; }
+
   .btn {
     margin-top: 8px;
     background: var(--accent);
@@ -437,7 +464,9 @@
   <div class="overlay-title">Game over.</div>
   <div class="overlay-sub">final score</div>
   <div class="overlay-score" id="finalScore">0</div>
-  <button class="btn" onclick="startGame()">Play again</button>
+  <button class="btn" onclick="goToStart()">Play again</button>
+  <button class="btn-share" onclick="shareScore()">Share Score</button>
+  <div class="copy-toast" id="copyToast">Copied!</div>
 </div>
 
 <script>
@@ -800,9 +829,23 @@ if (localStorage.getItem('1010theme') === 'dark') {
   document.getElementById('iconSun').style.display  = '';
 }
 
+function goToStart() {
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('startScreen').classList.remove('hidden');
+}
+
 function beginGame() {
   document.getElementById('startScreen').classList.add('hidden');
   startGame();
+}
+
+function shareScore() {
+  const text = `My DecaStack high score is: ${best}. Can you beat it?`;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = document.getElementById('copyToast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2000);
+  });
 }
 
 function showHowToPlay() {
