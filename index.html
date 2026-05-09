@@ -448,7 +448,7 @@
 <header>
   <div class="logo">DecaS<span>t</span>a<span>c</span>k</div>
   <div class="score-area">
-    <button id="pauseBtn" onclick="saveGame()" aria-label="Save game">
+    <button id="pauseBtn" aria-label="Save game">
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
         <line x1="7"  y1="4" x2="7"  y2="16"/>
         <line x1="13" y1="4" x2="13" y2="16"/>
@@ -933,8 +933,14 @@ function resumeGame() {
   document.getElementById('pauseBtn').style.color = '';
 }
 
-// Dismiss on backdrop click
-document.getElementById('pauseScreen').addEventListener('click', function(e) {
+// Pause button — use pointerdown so it fires reliably under touch-action:none
+document.getElementById('pauseBtn').addEventListener('pointerdown', function(e) {
+  e.stopPropagation();
+  saveGame();
+});
+
+// Dismiss on backdrop tap
+document.getElementById('pauseScreen').addEventListener('pointerdown', function(e) {
   if (e.target === this) resumeGame();
 });
 
