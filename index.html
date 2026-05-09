@@ -293,6 +293,41 @@
   }
   #darkToggle:hover { color: var(--text); }
 
+  /* ── Pause screen ── */
+  #pauseScreen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #pauseScreen.show { display: flex; }
+
+  .pause-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 28px 28px;
+    width: min(300px, calc(100vw - 48px));
+    box-shadow: 0 8px 40px rgba(0,0,0,0.14);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .pause-card .btn { white-space: nowrap; }
+
+  .pause-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 8px;
+  }
+
   /* ── Start screen ── */
   #startScreen {
     position: fixed;
@@ -456,6 +491,13 @@
 </button>
 
 <div id="floatingPiece"><div class="fp-grid" id="fpGrid"></div></div>
+
+<div id="pauseScreen">
+  <div class="pause-card">
+    <div class="pause-title">Paused.</div>
+    <button class="btn" onclick="resumeGame()">Continue playing</button>
+  </div>
+</div>
 
 <div id="startScreen">
   <div class="start-logo">DecaS<span>t</span>a<span>c</span>k</div>
@@ -880,13 +922,21 @@ function clearSavedState() {
 }
 
 function saveGame() {
+  if (!grid) return;
   saveState();
-  const toast = document.getElementById('copyToast');
-  // Briefly flash the pause icon to confirm
-  const btn = document.getElementById('pauseBtn');
-  btn.style.color = 'var(--accent)';
-  setTimeout(() => btn.style.color = '', 600);
+  document.getElementById('pauseScreen').classList.add('show');
+  document.getElementById('pauseBtn').style.color = 'var(--accent)';
 }
+
+function resumeGame() {
+  document.getElementById('pauseScreen').classList.remove('show');
+  document.getElementById('pauseBtn').style.color = '';
+}
+
+// Dismiss on backdrop click
+document.getElementById('pauseScreen').addEventListener('click', function(e) {
+  if (e.target === this) resumeGame();
+});
 
 // Auto-save when leaving the app
 document.addEventListener('visibilitychange', () => {
