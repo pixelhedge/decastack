@@ -76,7 +76,18 @@
   }
   .logo span { color: var(--accent); }
 
-  .score-area { margin-left: auto; display: flex; gap: 20px; }
+  .score-area { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+  #pauseBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 4px;
+    line-height: 0;
+    transition: color 0.15s;
+  }
+  #pauseBtn:hover { color: var(--text); }
   .score-box { text-align: right; }
 
   .score-label {
@@ -402,6 +413,12 @@
 <header>
   <div class="logo">DecaS<span>t</span>a<span>c</span>k</div>
   <div class="score-area">
+    <button id="pauseBtn" onclick="saveGame()" aria-label="Save game">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <line x1="7"  y1="4" x2="7"  y2="16"/>
+        <line x1="13" y1="4" x2="13" y2="16"/>
+      </svg>
+    </button>
     <div class="score-box">
       <div class="score-label">Score</div>
       <div class="score-value" id="score">0</div>
@@ -507,6 +524,7 @@ let previewCells = [];
 
 /* ── Init ── */
 function startGame() {
+  clearSavedState();
   grid = Array.from({length: ROWS}, () => new Array(COLS).fill(0));
   score = 0;
   best = parseInt(localStorage.getItem('1010best') || '0');
@@ -809,6 +827,7 @@ function checkGameOver() {
   if (!available.length) return;
   if (available.every(p => !canPlace(p))) {
     if (score > best) { best = score; localStorage.setItem('1010best', best); }
+    clearSavedState();
     document.getElementById('finalScore').textContent = score;
     document.getElementById('overlay').classList.add('show');
   }
@@ -840,13 +859,59 @@ function beginGame() {
 }
 
 function shareScore() {
-  const text = `My DecaStack high score is: ${best}. Can you beat it?`;
+  const text = `My DecaStack score today was ${score}. Can you beat it? https://decastack.netlify.app`;
   navigator.clipboard.writeText(text).then(() => {
     const toast = document.getElementById('copyToast');
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2000);
   });
 }
+
+/* ── State persistence ── */
+function saveState() {
+  if (!grid) return;
+  localStorage.setItem('ds_state', JSON.stringify({
+    grid, score, pieces
+  }));
+}
+
+function clearSavedState() {
+  localStorage.removeItem('ds_state');
+}
+
+function saveGame() {
+  saveState();
+  const toast = document.getElementById('copyToast');
+  // Briefly flash the pause icon to confirm
+  const btn = document.getElementById('pauseBtn');
+  btn.style.color = 'var(--accent)';
+  setTimeout(() => btn.style.color = '', 600);
+}
+
+// Auto-save when leaving the app
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && grid) saveState();
+});
+window.addEventListener('pagehide', () => {
+  if (grid) saveState();
+});
+
+// Restore saved state on load
+(function restoreIfSaved() {
+  const raw = localStorage.getItem('ds_state');
+  if (!raw) return;
+  try {
+    const s = JSON.parse(raw);
+    grid   = s.grid;
+    score  = s.score;
+    best   = parseInt(localStorage.getItem('1010best') || '0');
+    pieces = s.pieces;
+    document.getElementById('startScreen').classList.add('hidden');
+    updateScoreDisplay();
+    renderBoard();
+    renderTray();
+  } catch { clearSavedState(); }
+})();
 
 function showHowToPlay() {
   document.getElementById('howToPlay').classList.add('show');
