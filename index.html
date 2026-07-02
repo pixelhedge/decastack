@@ -496,6 +496,7 @@
   <div class="pause-card">
     <div class="pause-title">Paused.</div>
     <button class="btn" onclick="resumeGame()">Continue playing</button>
+    <button class="btn-ghost" onclick="quitGame()">Quit</button>
   </div>
 </div>
 
@@ -931,6 +932,12 @@ function saveGame() {
 function resumeGame() {
   document.getElementById('pauseScreen').classList.remove('show');
   document.getElementById('pauseBtn').style.color = '';
+}
+
+function quitGame() {
+  document.getElementById('pauseScreen').classList.remove('show');
+  document.getElementById('pauseBtn').style.color = '';
+  document.getElementById('startScreen').classList.remove('hidden');
 }
 
 // Pause button — use pointerdown so it fires reliably under touch-action:none
