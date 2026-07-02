@@ -18,11 +18,9 @@
     --text: #111110;
     --muted: #9a9a94;
     --accent: #0066ff;
-    --accent-light: #e6efff;
     --accent-glow: rgba(0, 102, 255, 0.15);
     --cell-empty: #eeeeeb;
     --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
-    --radius: 6px;
     --overlay-bg: rgba(245, 245, 243, 0.92);
   }
 
@@ -32,7 +30,6 @@
     --border: #333330;
     --text: #efefed;
     --muted: #666660;
-    --accent-light: #0d2a66;
     --accent-glow: rgba(0, 102, 255, 0.25);
     --cell-empty: #2c2c2a;
     --shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.15);
@@ -139,16 +136,6 @@
   .cell.filled-4 { background: #0047b3; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
   .cell.filled-5 { background: #66a3ff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
 
-  .cell.preview {
-    background: rgba(0, 102, 255, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
-  }
-
-  .cell.invalid-preview {
-    background: #ffe6e6;
-    box-shadow: inset 0 0 0 1.5px #ff4444;
-  }
-
   .cell.clearing {
     animation: clearPop 0.15s ease forwards;
   }
@@ -179,7 +166,7 @@
     justify-content: center;
     min-height: 90px;
     box-shadow: var(--shadow);
-    transition: opacity 0.15s, transform 0.15s;
+    transition: opacity 0.15s;
     touch-action: none;
     cursor: grab;
   }
@@ -531,7 +518,6 @@
 
 <script>
 const COLS = 10, ROWS = 10;
-const DRAG_Y_OFFSET = 0; // board preview tracks cursor; floating piece shows what you're carrying
 
 const PIECE_DEFS = [
   [[0,0]],
@@ -563,7 +549,18 @@ const PIECE_DEFS = [
 
 let grid, score, best, pieces;
 let active = null; // { piece, slotIdx, slotEl, _originR, _originC, _onBoard }
-let previewCells = [];
+
+const boardEl        = document.getElementById('board');
+const floatingEl     = document.getElementById('floatingPiece');
+const fpGridEl       = document.getElementById('fpGrid');
+
+// Bounding rows/cols of a piece
+function pieceDims(piece) {
+  return [
+    Math.max(...piece.map(([r]) => r)) + 1,
+    Math.max(...piece.map(([, c]) => c)) + 1,
+  ];
+}
 
 /* ── Init ── */
 function startGame() {
@@ -573,7 +570,6 @@ function startGame() {
   best = parseInt(localStorage.getItem('1010best') || '0');
   pieces = [null, null, null];
   active = null;
-  clearPreview();
   document.getElementById('overlay').classList.remove('show');
   updateScoreDisplay();
   renderBoard();
@@ -594,69 +590,47 @@ function flashScore() {
 }
 
 /* ── Board ── */
-function renderBoard() {
-  const board = document.getElementById('board');
-  board.innerHTML = '';
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const cell = document.createElement('div');
-      const v = grid[r][c];
-      cell.className = 'cell' + (v ? ` filled-${v}` : '');
-      cell.dataset.r = r;
-      cell.dataset.c = c;
-      board.appendChild(cell);
-    }
-  }
+// Cells are created once; renderBoard just updates them in place
+for (let i = 0; i < ROWS * COLS; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  boardEl.appendChild(cell);
 }
 
 function getCell(r, c) {
-  return document.querySelector(`#board [data-r="${r}"][data-c="${c}"]`);
+  return boardEl.children[r * COLS + c];
 }
 
-/* ── Preview ── */
-function clearPreview() {
-  previewCells.forEach(([r, c]) => {
-    const cell = getCell(r, c);
-    if (cell) cell.classList.remove('preview', 'invalid-preview');
-  });
-  previewCells = [];
-}
-
-function showPreview(originR, originC, piece) {
-  clearPreview();
-  const cells = piece.map(([dr, dc]) => [originR + dr, originC + dc]);
-  const valid = cells.every(([pr, pc]) =>
-    pr >= 0 && pr < ROWS && pc >= 0 && pc < COLS && !grid[pr][pc]
-  );
-  previewCells = cells;
-  cells.forEach(([pr, pc]) => {
-    const cell = getCell(pr, pc);
-    if (cell) cell.classList.add(valid ? 'preview' : 'invalid-preview');
-  });
-  return valid;
+function renderBoard() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = getCell(r, c);
+      const v = grid[r][c];
+      cell.className = 'cell' + (v ? ` filled-${v}` : '');
+      cell.style.animationDelay = '';
+    }
+  }
 }
 
 /* ── Floating piece ── */
 const GRID_GAP = 3;
 
 function getBoardMetrics() {
-  const rect = document.getElementById('board').getBoundingClientRect();
+  const rect = boardEl.getBoundingClientRect();
   const cellSize = (rect.width - (COLS - 1) * GRID_GAP) / COLS;
   const stride   = cellSize + GRID_GAP; // pixels per grid step (cell + gap)
   return { rect, cellSize, stride };
 }
 
-function showFloating(piece, x, y) {
-  const el  = document.getElementById('floatingPiece');
-  const fpg = document.getElementById('fpGrid');
-  const maxR = Math.max(...piece.map(([r]) => r)) + 1;
-  const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+// Built once per pickup; only repositioned on pointer moves
+function buildFloating(piece) {
+  const [maxR, maxC] = pieceDims(piece);
   const { cellSize } = getBoardMetrics();
 
-  fpg.innerHTML = '';
-  fpg.style.gridTemplateColumns = `repeat(${maxC}, ${cellSize}px)`;
-  fpg.style.gridTemplateRows    = `repeat(${maxR}, ${cellSize}px)`;
-  fpg.style.gap = `${GRID_GAP}px`;
+  fpGridEl.innerHTML = '';
+  fpGridEl.style.gridTemplateColumns = `repeat(${maxC}, ${cellSize}px)`;
+  fpGridEl.style.gridTemplateRows    = `repeat(${maxR}, ${cellSize}px)`;
+  fpGridEl.style.gap = `${GRID_GAP}px`;
 
   for (let r = 0; r < maxR; r++) {
     for (let c = 0; c < maxC; c++) {
@@ -665,17 +639,20 @@ function showFloating(piece, x, y) {
       cell.style.cssText = filled
         ? `width:${cellSize}px;height:${cellSize}px;border-radius:5px;background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,0.2)`
         : `width:${cellSize}px;height:${cellSize}px`;
-      fpg.appendChild(cell);
+      fpGridEl.appendChild(cell);
     }
   }
-  el.style.left = x + 'px';
-  el.style.top  = y + 'px';
-  el.style.display = 'block';
+  floatingEl.style.display = 'block';
+}
+
+function moveFloating(x, y) {
+  floatingEl.style.left = x + 'px';
+  floatingEl.style.top  = y + 'px';
 }
 
 function hideFloating() {
-  document.getElementById('floatingPiece').style.display = 'none';
-  document.getElementById('fpGrid').innerHTML = '';
+  floatingEl.style.display = 'none';
+  fpGridEl.innerHTML = '';
 }
 
 /* ── Pointer (mouse + touch) ── */
@@ -683,7 +660,8 @@ function onPointerDown(e, piece, slotIdx, slotEl) {
   e.preventDefault();
   active = { piece, slotIdx, slotEl, _onBoard: false, _originR: 0, _originC: 0 };
   slotEl.classList.add('lifting');
-  showFloating(piece, e.clientX, e.clientY);
+  buildFloating(piece);
+  moveFloating(e.clientX, e.clientY);
   updateDragPosition(e.clientX, e.clientY);
 }
 
@@ -691,8 +669,7 @@ function updateDragPosition(x, y) {
   const { piece } = active;
   const { rect, cellSize, stride } = getBoardMetrics();
 
-  const maxR = Math.max(...piece.map(([r]) => r)) + 1;
-  const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+  const [maxR, maxC] = pieceDims(piece);
 
   const totalW = maxC * cellSize + (maxC - 1) * GRID_GAP;
   const totalH = maxR * cellSize + (maxR - 1) * GRID_GAP;
@@ -718,7 +695,7 @@ function updateDragPosition(x, y) {
 function onPointerMove(e) {
   if (!active) return;
   e.preventDefault();
-  showFloating(active.piece, e.clientX, e.clientY);
+  moveFloating(e.clientX, e.clientY);
   updateDragPosition(e.clientX, e.clientY);
 }
 
@@ -757,7 +734,6 @@ document.addEventListener('pointercancel', () => {
   if (active) {
     active.slotEl.classList.remove('lifting');
     hideFloating();
-    clearPreview();
     active = null;
   }
 });
@@ -770,27 +746,23 @@ function checkAndClearLines() {
   if (!rowsToClear.length && !colsToClear.length) return;
 
   const toAnimate = new Set();
-  rowsToClear.forEach(r => { for (let c = 0; c < COLS; c++) toAnimate.add(`${r},${c}`); });
-  colsToClear.forEach(c => { for (let r = 0; r < ROWS; r++) toAnimate.add(`${r},${c}`); });
+  rowsToClear.forEach(r => { for (let c = 0; c < COLS; c++) toAnimate.add(r * COLS + c); });
+  colsToClear.forEach(c => { for (let r = 0; r < ROWS; r++) toAnimate.add(r * COLS + c); });
+
   // Sort cells center-first so animation radiates outward
-  const cellKeys = [...toAnimate];
-  const coords = cellKeys.map(k => k.split(',').map(Number));
+  const coords = [...toAnimate].map(i => [Math.floor(i / COLS), i % COLS]);
   const centerR = coords.reduce((s, [r]) => s + r, 0) / coords.length;
   const centerC = coords.reduce((s, [, c]) => s + c, 0) / coords.length;
-  cellKeys.sort((a, b) => {
-    const [ar, ac] = a.split(',').map(Number);
-    const [br, bc] = b.split(',').map(Number);
-    return (Math.hypot(ar - centerR, ac - centerC) - Math.hypot(br - centerR, bc - centerC));
-  });
+  coords.sort(([ar, ac], [br, bc]) =>
+    Math.hypot(ar - centerR, ac - centerC) - Math.hypot(br - centerR, bc - centerC)
+  );
+
   const ANIM_WINDOW_MS = 200; // fixed total spread regardless of cell count
-  const step = cellKeys.length > 1 ? ANIM_WINDOW_MS / (cellKeys.length - 1) : 0;
-  cellKeys.forEach((key, i) => {
-    const [r, c] = key.split(',').map(Number);
+  const step = coords.length > 1 ? ANIM_WINDOW_MS / (coords.length - 1) : 0;
+  coords.forEach(([r, c], i) => {
     const cell = getCell(r, c);
-    if (cell) {
-      cell.style.animationDelay = `${Math.round(i * step)}ms`;
-      cell.classList.add('clearing');
-    }
+    cell.style.animationDelay = `${Math.round(i * step)}ms`;
+    cell.classList.add('clearing');
   });
 
   const wrap = document.getElementById('boardWrap');
@@ -827,8 +799,7 @@ function renderTray() {
     slot.className = 'piece-slot' + (piece ? '' : ' empty');
 
     if (piece) {
-      const maxR = Math.max(...piece.map(([r]) => r)) + 1;
-      const maxC = Math.max(...piece.map(([, c]) => c)) + 1;
+      const [maxR, maxC] = pieceDims(piece);
       const pg = document.createElement('div');
       pg.className = 'piece-grid';
       pg.style.gridTemplateColumns = `repeat(${maxC}, 14px)`;
@@ -935,8 +906,7 @@ function resumeGame() {
 }
 
 function quitGame() {
-  document.getElementById('pauseScreen').classList.remove('show');
-  document.getElementById('pauseBtn').style.color = '';
+  resumeGame();
   document.getElementById('startScreen').classList.remove('hidden');
 }
 
